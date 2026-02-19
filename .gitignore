@@ -1,0 +1,94 @@
+# =========================
+# Python
+# =========================
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# =========================
+# Environment files
+# =========================
+.env
+.env.*
+!.env_example
+
+# =========================
+# Python build / packaging
+# =========================
+build/
+dist/
+*.egg-info/
+
+# =========================
+# Logs
+# =========================
+*.log
+
+# =========================
+# IDE
+# =========================
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# =========================
+# Database
+# =========================
+*.db
+*.sqlite3
+
+# =========================
+# Backend runtime data
+# =========================
+backend/data/
+backend/app/data/
+backend/data/jobs/*
+!backend/data/jobs/.gitkeep
+
+# =========================
+# Uploaded media
+# =========================
+*.mp4
+*.mov
+*.avi
+*.webm
+*.png
+*.jpg
+*.jpeg
+
+# (except figures)
+!figures/
+
+# =========================
+# AI / ML
+# =========================
+models/
+checkpoints/
+.cache/
+.huggingface/
+
+# =========================
+# Node / React
+# =========================
+frontend/node_modules/
+frontend/build/
+frontend/.next/
+frontend/dist/
+
+# =========================
+# Alembic migrations cache
+# =========================
+alembic/versions/*.pyc
+
+# =========================
+# OS
+# =========================
+Thumbs.db
