@@ -92,3 +92,9 @@ alembic/versions/*.pyc
 # OS
 # =========================
 Thumbs.db
+.venv/
+__pycache__/
+*.pyc
+.env
+storage/
+data/jobs/
