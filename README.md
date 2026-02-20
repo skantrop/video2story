@@ -1,1 +1,2 @@
-ME
+System requirements:
+- FFmpeg

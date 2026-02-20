@@ -8,3 +8,4 @@ asyncpg
 alembic
 python-dotenv
 httpx
+opencv-python

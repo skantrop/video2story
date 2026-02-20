@@ -98,3 +98,5 @@ __pycache__/
 .env
 storage/
 data/jobs/
+
+backend/storage/
