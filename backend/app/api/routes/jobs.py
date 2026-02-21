@@ -1,18 +1,24 @@
 from pathlib import Path
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.persistence.db import get_db, SessionLocal
-from app.persistence.tables import Snapshot, VideoJob
+from app.persistence.tables import Snapshot, SnapshotConfig, VideoAsset, VideoJob
 from app.pipeline.extract import extract_preprocess_persist_snapshots
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
+# backend/storage
 STORAGE_ROOT = Path(__file__).resolve().parents[3] / "storage"
 
 
 def _run_extract_job(job_id: str) -> None:
+    """
+    Background task entrypoint.
+    Create a fresh DB session here (do NOT reuse request-scoped session).
+    """
     db = SessionLocal()
     try:
         extract_preprocess_persist_snapshots(job_id, db, STORAGE_ROOT)
@@ -20,8 +26,79 @@ def _run_extract_job(job_id: str) -> None:
         db.close()
 
 
+@router.get("")
+def list_jobs(db: Session = Depends(get_db)):
+    """
+    List jobs for sidebar: id, status, created_at, snapshot_count.
+    """
+    rows = (
+        db.query(
+            VideoJob.job_id,
+            VideoJob.status,
+            VideoJob.created_at,
+            func.count(Snapshot.snapshot_id).label("snapshot_count"),
+        )
+        .outerjoin(Snapshot, Snapshot.job_id == VideoJob.job_id)
+        .group_by(VideoJob.job_id)
+        .order_by(VideoJob.created_at.desc())
+        .all()
+    )
+
+    return {
+        "jobs": [
+            {
+                "job_id": r.job_id,
+                "status": r.status,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+                "snapshot_count": int(r.snapshot_count or 0),
+            }
+            for r in rows
+        ]
+    }
+
+
+@router.get("/{job_id}")
+def get_job(job_id: str, db: Session = Depends(get_db)):
+    """
+    Job detail: status, created_at, video uri, config, snapshot_count.
+    """
+    job = db.query(VideoJob).filter_by(job_id=job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    asset = db.query(VideoAsset).filter_by(job_id=job_id).first()
+    cfg = db.query(SnapshotConfig).filter_by(job_id=job_id).first()
+
+    snapshot_count = (
+        db.query(func.count(Snapshot.snapshot_id))
+        .filter(Snapshot.job_id == job_id)
+        .scalar()
+    )
+
+    return {
+        "job_id": job.job_id,
+        "status": job.status,
+        "created_at": job.created_at.isoformat() if job.created_at else None,
+        "video_uri": asset.uri if asset else None,
+        "snapshot_count": int(snapshot_count or 0),
+        "config": None
+        if not cfg
+        else {
+            "sampling_fps": float(cfg.sampling_fps),
+            "chunk_length_sec": cfg.chunk_length_sec,
+            "resize_width": cfg.resize_width,
+            "grayscale": bool(cfg.grayscale),
+            "black_white": bool(cfg.black_white),
+            "image_format": cfg.image_format,
+        },
+    }
+
+
 @router.get("/{job_id}/snapshots")
 def list_snapshots(job_id: str, db: Session = Depends(get_db)):
+    """
+    List snapshots for a job. Returns URLs under /storage/... for <img src>.
+    """
     job = db.query(VideoJob).filter_by(job_id=job_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -35,8 +112,10 @@ def list_snapshots(job_id: str, db: Session = Depends(get_db)):
 
     out = []
     for s in snaps:
+        # Snapshot.uri is typically an absolute path to a file under STORAGE_ROOT.
         p = Path(s.uri)
 
+        # Convert absolute file path -> relative -> URL under /storage
         rel = p.relative_to(STORAGE_ROOT)
         url = f"/storage/{rel.as_posix()}"
 
@@ -54,6 +133,14 @@ def list_snapshots(job_id: str, db: Session = Depends(get_db)):
 
 
 @router.post("/{job_id}/extract")
-def run_extract(job_id: str, background: BackgroundTasks):
+def run_extract(job_id: str, background: BackgroundTasks, db: Session = Depends(get_db)):
+    """
+    Trigger extraction in the background.
+    (Optional) checks job exists first.
+    """
+    job = db.query(VideoJob).filter_by(job_id=job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
     background.add_task(_run_extract_job, job_id)
     return {"job_id": job_id, "status": "extraction_started"}
