@@ -35,14 +35,16 @@ def list_snapshots(job_id: str, db: Session = Depends(get_db)):
 
     out = []
     for s in snaps:
-        p = s.uri.replace("\\", "/")
-        # map "backend/storage/..." -> "/storage/..."
-        p = p.replace("backend/storage", "/storage")
+        p = Path(s.uri)
+
+        rel = p.relative_to(STORAGE_ROOT)
+        url = f"/storage/{rel.as_posix()}"
+
         out.append(
             {
                 "snapshot_id": s.snapshot_id,
                 "timestamp_sec": s.timestamp_sec,
-                "url": p,
+                "url": url,
                 "width": s.width,
                 "height": s.height,
             }

@@ -99,4 +99,14 @@ __pycache__/
 storage/
 data/jobs/
 
+# Python
+backend/.venv/
 backend/storage/
+
+#frondtend files
+# Frontend (Vite/React)
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.*
+frontend/.vite/
