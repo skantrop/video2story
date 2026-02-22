@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import uuid
+from fastapi import File, Form, UploadFile
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -144,3 +146,85 @@ def run_extract(job_id: str, background: BackgroundTasks, db: Session = Depends(
 
     background.add_task(_run_extract_job, job_id)
     return {"job_id": job_id, "status": "extraction_started"}
+
+def _save_upload(upload: UploadFile, dst: Path) -> None:
+    dst.parent.mkdir(parents=True, exist_ok=True)
+    with dst.open("wb") as f:
+        while True:
+            chunk = upload.file.read(1024 * 1024)
+            if not chunk:
+                break
+            f.write(chunk)
+
+
+@router.post("")
+def create_job(
+    background: BackgroundTasks,
+    db: Session = Depends(get_db),
+
+    # uploaded video
+    video: UploadFile = File(...),
+
+    # config fields from UI
+    sampling_fps: float = Form(1.0),
+    chunk_length_sec: int = Form(10),
+    resize_width: int = Form(512),
+    grayscale: bool = Form(False),
+    black_white: bool = Form(False),
+    image_format: str = Form("jpg"),
+
+    # workflow toggle
+    run_extract: bool = Form(True),
+):
+    job_id = str(uuid.uuid4())
+
+    # 1) create job
+    job = VideoJob(job_id=job_id, status="uploaded")
+    db.add(job)
+
+    # 2) save video file into storage/jobs/<job_id>/video/original.<ext>
+    ext = "mp4"
+    if video.filename and "." in video.filename:
+        ext = video.filename.rsplit(".", 1)[-1].lower()
+
+    video_path = STORAGE_ROOT / "jobs" / job_id / "video" / f"original.{ext}"
+    try:
+        _save_upload(video, video_path)
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Failed to save upload: {e}")
+
+    # 3) persist video asset row
+    db.add(
+        VideoAsset(
+            video_id=str(uuid.uuid4()),
+            job_id=job_id,
+            uri=str(video_path),
+        )
+    )
+
+    # 4) persist snapshot config row
+    db.add(
+        SnapshotConfig(
+            config_id=str(uuid.uuid4()),
+            job_id=job_id,
+            sampling_fps=sampling_fps,
+            chunk_length_sec=chunk_length_sec,
+            resize_width=resize_width,
+            grayscale=grayscale,
+            black_white=black_white,
+            image_format=image_format,
+        )
+    )
+
+    db.commit()
+
+    # 5) optionally run extraction in background
+    if run_extract:
+        background.add_task(_run_extract_job, job_id)
+
+    return {
+        "job_id": job_id,
+        "status": "extracting" if run_extract else "uploaded",
+        "video_url": f"/storage/jobs/{job_id}/video/{video_path.name}",
+    }

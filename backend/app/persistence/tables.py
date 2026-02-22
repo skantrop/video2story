@@ -12,6 +12,9 @@ from sqlalchemy import (
     Index,
     text,
 )
+from datetime import datetime
+from sqlalchemy import Column, DateTime, String
+from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 from sqlalchemy.dialects.postgresql import JSONB
 
@@ -23,7 +26,7 @@ class VideoJob(Base):
 
     job_id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()), index=True)
     status = Column(String, nullable=False, default="created")
-    created_at = Column(DateTime, nullable=False, server_default=text("now()"))
+    created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
     # 1:1
     asset = relationship(
