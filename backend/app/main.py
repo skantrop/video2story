@@ -3,6 +3,7 @@ from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes.jobs import router as jobs_router
+from app.api.routes.scenes import router as scenes_router
 
 app = FastAPI()
 
@@ -20,3 +21,4 @@ STORAGE_ROOT = Path(__file__).resolve().parents[1] / "storage"
 app.mount("/storage", StaticFiles(directory=str(STORAGE_ROOT)), name="storage")
 
 app.include_router(jobs_router)
+app.include_router(scenes_router)

@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import JobsSidebar from "../components/JobsSidebar";
 import SnapshotsGrid from "../components/SnapshotsGrid";
+import ScenesPage from "./ScenesPage";
 
 import { listJobs, getJob, listSnapshots, deleteJob } from "../api/jobs";
 
@@ -15,7 +16,14 @@ export default function JobsPage() {
   const [loadingJobs, setLoadingJobs] = useState(false);
   const [error, setError] = useState("");
 
-  // ---------- LOAD JOBS ----------
+  const [tab, setTab] = useState("snapshots");
+
+  // ---------- helpers ----------
+  const isRunning = useMemo(() => {
+    const st = detail?.status;
+    return st && ["created", "uploaded", "extracting"].includes(st);
+  }, [detail?.status]);
+
   async function refreshJobs() {
     setLoadingJobs(true);
     try {
@@ -23,6 +31,7 @@ export default function JobsPage() {
       const list = data.jobs ?? [];
       setJobs(list);
 
+      // auto-select first if none selected
       if (!selectedJobId && list.length) {
         setSelectedJobId(list[0].job_id);
       }
@@ -33,29 +42,18 @@ export default function JobsPage() {
     }
   }
 
-  // ---------- LOAD JOB DETAIL ----------
-  async function loadDetail(jobId) {
+  async function loadDetailAndSnapshots(jobId) {
     if (!jobId) return;
     try {
-      const data = await getJob(jobId);
-      setDetail(data);
+      const [d, s] = await Promise.all([getJob(jobId), listSnapshots(jobId)]);
+      setDetail(d);
+      setSnapshots(s.snapshots ?? []);
     } catch (e) {
       setError(String(e.message || e));
     }
   }
 
-  // ---------- LOAD SNAPSHOTS ----------
-  async function loadSnapshots(jobId) {
-    if (!jobId) return;
-    try {
-      const data = await listSnapshots(jobId);
-      setSnapshots(data.snapshots ?? []);
-    } catch (e) {
-      setError(String(e.message || e));
-    }
-  }
-
-  // ---------- DELETE JOB ----------
+  // ---------- delete ----------
   async function onDelete(jobId) {
     if (!jobId) return;
     if (!confirm("Delete this job? This removes DB rows and files.")) return;
@@ -73,87 +71,85 @@ export default function JobsPage() {
       setSelectedJobId(nextId);
       setDetail(null);
       setSnapshots([]);
+      setTab("snapshots");
 
       if (nextId) {
-        await Promise.all([loadDetail(nextId), loadSnapshots(nextId)]);
+        await loadDetailAndSnapshots(nextId);
       }
     } catch (e) {
       setError(String(e.message || e));
     }
   }
 
-  // ---------- EFFECTS ----------
+  // ---------- initial load ----------
   useEffect(() => {
     refreshJobs();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ---------- when selection changes: load once + reset tab ----------
   useEffect(() => {
-    if (selectedJobId) {
-      loadDetail(selectedJobId);
-      loadSnapshots(selectedJobId);
-    }
+    if (!selectedJobId) return;
+    setError("");
+    setTab("snapshots");
+    setDetail(null);
+    setSnapshots([]);
+    loadDetailAndSnapshots(selectedJobId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedJobId]);
 
-    useEffect(() => {
+  // ---------- polling while extracting ----------
+  useEffect(() => {
     if (!selectedJobId) return;
+    if (!isRunning) return;
 
     let cancelled = false;
     let timerId = null;
 
     async function tick() {
-        try {
-        const d = await getJob(selectedJobId);
+      try {
+        const [d, s, j] = await Promise.all([
+          getJob(selectedJobId),
+          listSnapshots(selectedJobId),
+          listJobs(),
+        ]);
         if (cancelled) return;
+
         setDetail(d);
-
-        // fetch snapshots too
-        const s = await listSnapshots(selectedJobId);
-        if (cancelled) return;
         setSnapshots(s.snapshots ?? []);
-
-        // update sidebar counts/status
-        const j = await listJobs();
-        if (cancelled) return;
         setJobs(j.jobs ?? []);
 
-        // keep polling while extracting/created/uploaded
-        const stillRunning = ["created", "uploaded", "extracting"].includes(d.status);
-        if (stillRunning) {
-            timerId = setTimeout(tick, 1500);
+        const still = ["created", "uploaded", "extracting"].includes(d.status);
+        if (still) {
+          timerId = setTimeout(tick, 1500);
         }
-        } catch (e) {
-        // don’t spam errors during polling; optional:
-        // setError(String(e.message || e));
-        }
+      } catch {
+        // ignore polling errors to avoid spam
+      }
     }
 
     tick();
 
     return () => {
-        cancelled = true;
-        if (timerId) clearTimeout(timerId);
+      cancelled = true;
+      if (timerId) clearTimeout(timerId);
     };
-    }, [selectedJobId]);
+  }, [selectedJobId, isRunning]);
+
   // ---------- UI ----------
   return (
     <div style={{ display: "grid", gridTemplateColumns: "320px 1fr", height: "100vh" }}>
-      {/* LEFT SIDEBAR */}
       <JobsSidebar
         jobs={jobs}
         selectedJobId={selectedJobId}
         onSelect={setSelectedJobId}
         onRefresh={refreshJobs}
         loading={loadingJobs}
-        onDeleteJob={onDelete}   // ⭐ DELETE WIRED HERE
+        onDeleteJob={onDelete}
       />
 
-      {/* RIGHT CONTENT */}
       <main style={{ padding: 16, overflow: "auto" }}>
-        {error && (
-          <div style={{ color: "red", marginBottom: 12 }}>
-            {error}
-          </div>
-        )}
+        {error && <div style={{ color: "red", marginBottom: 12 }}>{error}</div>}
 
         {!selectedJobId && <div>Select a job</div>}
 
@@ -161,19 +157,57 @@ export default function JobsPage() {
           <>
             {/* DETAIL */}
             {detail && (
-              <div style={{ marginBottom: 16 }}>
-                <h2 style={{ marginBottom: 8 }}>Job detail</h2>
-
+              <div style={{ marginBottom: 12 }}>
+                <h2 style={{ marginBottom: 6 }}>Job detail</h2>
                 <div style={{ fontSize: 13, color: "#555" }}>
-                  <div><b>ID:</b> {detail.job_id}</div>
-                  <div><b>Status:</b> {detail.status}</div>
-                  <div><b>Snapshots:</b> {detail.snapshot_count}</div>
+                  <div>
+                    <b>ID:</b> {detail.job_id}
+                  </div>
+                  <div>
+                    <b>Status:</b> {detail.status}
+                  </div>
+                  <div>
+                    <b>Snapshots:</b> {detail.snapshot_count}
+                  </div>
                 </div>
               </div>
             )}
 
-            {/* SNAPSHOTS */}
-            <SnapshotsGrid snapshots={snapshots} />
+            {/* TABS */}
+            <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+              <button
+                onClick={() => setTab("snapshots")}
+                style={{
+                  padding: "6px 10px",
+                  borderRadius: 10,
+                  border: "1px solid #ddd",
+                  background: tab === "snapshots" ? "#f3f3f3" : "#908f8f",
+                  color: "#666",
+                  cursor: "pointer",
+                }}
+              >
+                Snapshots
+              </button>
+
+              <button
+                onClick={() => setTab("scenes")}
+                style={{
+                  padding: "6px 10px",
+                  borderRadius: 10,
+                  border: "1px solid #ddd",
+                  background: tab === "scenes" ? "#f3f3f3" : "#908f8f",
+                  color: "#666",
+                  cursor: "pointer",
+                }}
+              >
+                Scenes
+              </button>
+            </div>
+
+            {/* CONTENT */}
+            {tab === "snapshots" && <SnapshotsGrid snapshots={snapshots} />}
+
+            {tab === "scenes" && <ScenesPage jobId={selectedJobId} />}
           </>
         )}
       </main>
