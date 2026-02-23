@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { createJob } from "../api/jobs";
 
 export default function NewJobPage() {
@@ -9,6 +10,7 @@ export default function NewJobPage() {
   const [blackWhite, setBlackWhite] = useState(false);
   const [imageFormat, setImageFormat] = useState("jpg");
   const [runExtract, setRunExtract] = useState(true);
+  const navigate = useNavigate();
 
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState(null);
@@ -34,6 +36,7 @@ export default function NewJobPage() {
 
       const data = await createJob(fd);
       setResult(data);
+      navigate(`/jobs?job=${data.job_id}`);
     } catch (e2) {
       setError(String(e2.message || e2));
     } finally {
@@ -106,7 +109,7 @@ export default function NewJobPage() {
         <button
           type="submit"
           disabled={!file || loading}
-          style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid #ddd", background: "white" }}
+          style={{ padding: "10px 12px", borderRadius: 10, border: "1px solid #ddd", background: "green" }}
         >
           {loading ? "Creating…" : "Create job"}
         </button>

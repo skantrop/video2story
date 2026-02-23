@@ -1,6 +1,7 @@
 from pathlib import Path
 
 import uuid
+import shutil
 from fastapi import File, Form, UploadFile
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from sqlalchemy import func
@@ -228,3 +229,17 @@ def create_job(
         "status": "extracting" if run_extract else "uploaded",
         "video_url": f"/storage/jobs/{job_id}/video/{video_path.name}",
     }
+
+@router.delete("/{job_id}")
+def delete_job(job_id: str, db: Session = Depends(get_db)):
+    job = db.query(VideoJob).filter_by(job_id=job_id).first()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    db.delete(job)
+    db.commit()
+
+    job_dir = STORAGE_ROOT / "jobs" / job_id
+    shutil.rmtree(job_dir, ignore_errors=True)
+
+    return {"job_id": job_id, "status": "deleted"}

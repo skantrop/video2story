@@ -28,3 +28,8 @@ export async function createJob(formData) {
   const res = await apiFetch("/jobs", { method: "POST", body: formData });
   return res.json();
 }
+
+export async function deleteJob(jobId) {
+  const res = await apiFetch(`/jobs/${jobId}`, { method: "DELETE" });
+  return res.json();
+}

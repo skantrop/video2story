@@ -9,6 +9,7 @@ export default function StatusBadge({ status }) {
         border: "1px solid #ddd",
         fontSize: 12,
         background: "#fafafa",
+        color: "#666",
       }}
     >
       {label}
