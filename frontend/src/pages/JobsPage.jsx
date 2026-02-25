@@ -98,43 +98,6 @@ export default function JobsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedJobId]);
 
-  // ---------- polling while extracting ----------
-  useEffect(() => {
-    if (!selectedJobId) return;
-    if (!isRunning) return;
-
-    let cancelled = false;
-    let timerId = null;
-
-    async function tick() {
-      try {
-        const [d, s, j] = await Promise.all([
-          getJob(selectedJobId),
-          listSnapshots(selectedJobId),
-          listJobs(),
-        ]);
-        if (cancelled) return;
-
-        setDetail(d);
-        setSnapshots(s.snapshots ?? []);
-        setJobs(j.jobs ?? []);
-
-        const still = ["created", "uploaded", "extracting"].includes(d.status);
-        if (still) {
-          timerId = setTimeout(tick, 1500);
-        }
-      } catch {
-        // ignore polling errors to avoid spam
-      }
-    }
-
-    tick();
-
-    return () => {
-      cancelled = true;
-      if (timerId) clearTimeout(timerId);
-    };
-  }, [selectedJobId, isRunning]);
 
   // ---------- UI ----------
   return (

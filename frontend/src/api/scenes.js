@@ -14,3 +14,11 @@ export async function getScene(jobId, sceneId, keyframes = 8) {
   const res = await apiFetch(`/jobs/${jobId}/scenes/${sceneId}?keyframes=${keyframes}`);
   return res.json();
 }
+
+export async function describeScene(jobId, sceneId, keyframes = 8) {
+  const res = await apiFetch(
+    `/jobs/${jobId}/scenes/${sceneId}/describe?keyframes=${keyframes}`,
+    { method: "POST" }
+  );
+  return res.json();
+}

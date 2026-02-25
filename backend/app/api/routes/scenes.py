@@ -1,5 +1,6 @@
 from __future__ import annotations
-
+import anyio
+from app.services.vlm.hf_client import describe_scene_hf
 import math
 import uuid
 from pathlib import Path
@@ -20,7 +21,6 @@ from app.persistence.tables import (
 
 router = APIRouter(prefix="/jobs", tags=["scenes"])
 
-# backend/storage
 STORAGE_ROOT = Path(__file__).resolve().parents[3] / "storage"
 
 DEFAULT_KEYFRAMES = 8
@@ -37,9 +37,6 @@ def _storage_url_from_snapshot_uri(uri: str) -> str:
 
 
 def _pick_uniform_keyframes(snaps: List[Snapshot], k: int) -> List[Snapshot]:
-    """
-    Pick k snapshots uniformly from an ordered list.
-    """
     if not snaps:
         return []
     if k <= 0:
@@ -147,8 +144,8 @@ def list_scenes(job_id: str, db: Session = Depends(get_db)):
             Scene.scene_id,
             Scene.start_sec,
             Scene.end_sec,
-            # if your Scene model has description, include it
-            getattr(Scene, "description", None),
+            Scene.short_description,
+            Scene.confidence,
             func.count(SceneSnapshot.snapshot_id).label("snapshot_count"),
         )
         .outerjoin(SceneSnapshot, SceneSnapshot.scene_id == Scene.scene_id)
@@ -160,23 +157,18 @@ def list_scenes(job_id: str, db: Session = Depends(get_db)):
 
     scenes_out = []
     for r in rows:
-        # r[3] might be None if Scene has no description column
-        desc = None
-        if len(r) >= 4 and isinstance(r[3], str):
-            desc = r[3]
-
         scenes_out.append(
             {
-                "scene_id": r[0],
-                "start_sec": float(r[1]),
-                "end_sec": float(r[2]),
-                "snapshot_count": int(r[-1] or 0),
-                "description": desc,
+                "scene_id": r.scene_id,
+                "start_sec": float(r.start_sec),
+                "end_sec": float(r.end_sec),
+                "snapshot_count": int(r.snapshot_count or 0),
+                "short_description": r.short_description,
+                "confidence": r.confidence,
             }
         )
 
     return {"job_id": job_id, "count": len(scenes_out), "scenes": scenes_out}
-
 
 @router.get("/{job_id}/scenes/{scene_id}")
 def get_scene(job_id: str, scene_id: str, keyframes: int = DEFAULT_KEYFRAMES, db: Session = Depends(get_db)):
@@ -218,4 +210,39 @@ def get_scene(job_id: str, scene_id: str, keyframes: int = DEFAULT_KEYFRAMES, db
         "keyframes_count": len(out_keyframes),
         "snapshots_total": len(snaps),
         "description": getattr(scene, "description", None),
+    }
+
+@router.post("/{job_id}/scenes/{scene_id}/describe")
+def describe_scene(job_id: str, scene_id: str, keyframes: int = DEFAULT_KEYFRAMES, db: Session = Depends(get_db)):
+    scene = db.query(Scene).filter_by(scene_id=scene_id, job_id=job_id).first()
+    if not scene:
+        raise HTTPException(status_code=404, detail="Scene not found")
+
+    snaps = (
+        db.query(Snapshot)
+        .join(SceneSnapshot, SceneSnapshot.snapshot_id == Snapshot.snapshot_id)
+        .filter(SceneSnapshot.scene_id == scene_id)
+        .order_by(Snapshot.timestamp_sec.asc())
+        .all()
+    )
+
+    if not snaps:
+        raise HTTPException(status_code=400, detail="Scene has no snapshots")
+
+    key_snaps = _pick_uniform_keyframes(snaps, int(keyframes))
+    key_paths = [Path(s.uri) for s in key_snaps]
+
+    # Call HF router VLM
+    result = anyio.run(describe_scene_hf, key_paths)
+
+    scene.short_description = result.text
+    scene.confidence = result.confidence
+    db.commit()
+    db.refresh(scene)
+
+    return {
+        "job_id": job_id,
+        "scene_id": scene_id,
+        "short_description": scene.short_description,
+        "confidence": scene.confidence,
     }

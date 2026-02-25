@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
-import { buildScenes, getScene, listScenes } from "../api/scenes";
+import { buildScenes, describeScene, getScene, listScenes } from "../api/scenes";
+import { toAbsUrl } from "../api/client";
 
 export default function ScenesPage({ jobId }) {
   const [scenes, setScenes] = useState([]);
@@ -9,6 +10,7 @@ export default function ScenesPage({ jobId }) {
 
   const [loading, setLoading] = useState(false);
   const [building, setBuilding] = useState(false);
+  const [describing, setDescribing] = useState(false);
   const [error, setError] = useState("");
 
   async function refreshScenes() {
@@ -55,23 +57,66 @@ export default function ScenesPage({ jobId }) {
     }
   }
 
+async function onDescribe() {
+  if (!jobId || !selectedSceneId) return;
+
+  setDescribing(true);
+  setError("");
+
+  try {
+    const updated = await describeScene(jobId, selectedSceneId, 8);
+
+    // ✅ update right panel immediately
+    setSceneDetail((prev) =>
+      prev ? { ...prev, short_description: updated.short_description } : prev
+    );
+
+    // ✅ update left list immediately (main page list)
+    setScenes((prev) =>
+      prev.map((s) =>
+        s.scene_id === selectedSceneId
+          ? { ...s, short_description: updated.short_description }
+          : s
+      )
+    );
+
+    // (optional) also refresh from server for truth
+    // await refreshScenes();
+    // await loadScene(selectedSceneId);
+  } catch (e) {
+    setError(String(e.message || e));
+  } finally {
+    setDescribing(false);
+  }
+}
+
   // load list on job change
   useEffect(() => {
     setScenes([]);
     setSelectedSceneId("");
     setSceneDetail(null);
     if (jobId) refreshScenes();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [jobId]);
 
   // load detail when selection changes
   useEffect(() => {
     if (selectedSceneId) loadScene(selectedSceneId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedSceneId]);
 
   return (
     <div style={{ display: "grid", gridTemplateColumns: "320px 1fr", gap: 12 }}>
       {/* Left: scene list */}
-      <div style={{ border: "1px solid #eee", borderRadius: 12, padding: 12, background: "white" }}>
+      <div
+        style={{
+          border: "1px solid #eee",
+          borderRadius: 12,
+          padding: 12,
+          background: "white",
+          color: "#666"
+        }}
+      >
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
           <h3 style={{ margin: 0 }}>Scenes</h3>
           <button
@@ -83,6 +128,7 @@ export default function ScenesPage({ jobId }) {
               border: "1px solid #ddd",
               background: "white",
               cursor: building ? "not-allowed" : "pointer",
+              color: "#666"
             }}
           >
             {building ? "Building…" : "Build scenes"}
@@ -118,7 +164,9 @@ export default function ScenesPage({ jobId }) {
                   <div style={{ fontSize: 13, fontWeight: 600 }}>{title}</div>
                   <div style={{ fontSize: 12, color: "#666" }}>{s.snapshot_count} snaps</div>
                 </div>
+
                 <div style={{ marginTop: 4, fontSize: 12, color: "#666" }}>{range}</div>
+
                 {s.short_description && (
                   <div style={{ marginTop: 6, fontSize: 12, color: "#444" }}>
                     {s.short_description}
@@ -137,7 +185,14 @@ export default function ScenesPage({ jobId }) {
       </div>
 
       {/* Right: scene detail */}
-      <div style={{ border: "1px solid #eee", borderRadius: 12, padding: 12, background: "white" }}>
+      <div
+        style={{
+          border: "1px solid #eee",
+          borderRadius: 12,
+          padding: 12,
+          background: "white",
+        }}
+      >
         {!sceneDetail && (
           <div style={{ color: "#666", fontSize: 13 }}>
             Select a scene to view keyframes.
@@ -146,10 +201,37 @@ export default function ScenesPage({ jobId }) {
 
         {sceneDetail && (
           <>
-            <div style={{ display: "flex", justifyContent: "space-between", gap: 12, alignItems: "baseline" }}>
+            {/* Header row with describe button */}
+            <div
+              style={{
+                display: "flex",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: 12,
+                color: "#666"
+              }}
+            >
               <h3 style={{ margin: 0 }}>Keyframes</h3>
-              <div style={{ fontSize: 12, color: "#666" }}>
-                {sceneDetail.keyframes_count} keyframes · {sceneDetail.snapshots_total} total
+
+              <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+                <div style={{ fontSize: 12, color: "#666" }}>
+                  {sceneDetail.keyframes_count} keyframes · {sceneDetail.snapshots_total} total
+                </div>
+
+                <button
+                  onClick={onDescribe}
+                  disabled={!selectedSceneId || describing}
+                  style={{
+                    padding: "6px 10px",
+                    borderRadius: 10,
+                    border: "1px solid #ddd",
+                    background: "white",
+                    cursor: "pointer",
+                    color: "#666"
+                  }}
+                >
+                  {describing ? "Describing…" : "Describe scene"}
+                </button>
               </div>
             </div>
 
@@ -185,7 +267,7 @@ export default function ScenesPage({ jobId }) {
                   }}
                 >
                   <img
-                    src={k.url}
+                    src={toAbsUrl(k.url)}
                     alt={`t=${k.timestamp_sec}s`}
                     style={{
                       width: "100%",

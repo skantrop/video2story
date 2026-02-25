@@ -9,3 +9,6 @@ alembic
 python-dotenv
 httpx
 opencv-python
+httpx
+Pillow
+openai

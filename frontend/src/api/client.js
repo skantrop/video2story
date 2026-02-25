@@ -9,4 +9,10 @@ export async function apiFetch(path, options = {}) {
   return res;
 }
 
+export function toAbsUrl(url) {
+  if (!url) return url;
+  if (url.startsWith("http://") || url.startsWith("https://")) return url;
+  return `${API_BASE}${url}`;
+}
+
 export { API_BASE };
