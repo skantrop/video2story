@@ -4,6 +4,7 @@ from pathlib import Path
 from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes.jobs import router as jobs_router
 from app.api.routes.scenes import router as scenes_router
+from app.api.routes.narrative import router as narrative_router
 
 app = FastAPI()
 
@@ -22,3 +23,4 @@ app.mount("/storage", StaticFiles(directory=str(STORAGE_ROOT)), name="storage")
 
 app.include_router(jobs_router)
 app.include_router(scenes_router)
+app.include_router(narrative_router)

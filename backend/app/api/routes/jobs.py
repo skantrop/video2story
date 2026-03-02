@@ -13,15 +13,10 @@ from app.pipeline.extract import extract_preprocess_persist_snapshots
 
 router = APIRouter(prefix="/jobs", tags=["jobs"])
 
-# backend/storage
 STORAGE_ROOT = Path(__file__).resolve().parents[3] / "storage"
 
 
 def _run_extract_job(job_id: str) -> None:
-    """
-    Background task entrypoint.
-    Create a fresh DB session here (do NOT reuse request-scoped session).
-    """
     db = SessionLocal()
     try:
         extract_preprocess_persist_snapshots(job_id, db, STORAGE_ROOT)
@@ -31,9 +26,6 @@ def _run_extract_job(job_id: str) -> None:
 
 @router.get("")
 def list_jobs(db: Session = Depends(get_db)):
-    """
-    List jobs for sidebar: id, status, created_at, snapshot_count.
-    """
     rows = (
         db.query(
             VideoJob.job_id,
@@ -62,9 +54,6 @@ def list_jobs(db: Session = Depends(get_db)):
 
 @router.get("/{job_id}")
 def get_job(job_id: str, db: Session = Depends(get_db)):
-    """
-    Job detail: status, created_at, video uri, config, snapshot_count.
-    """
     job = db.query(VideoJob).filter_by(job_id=job_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -99,9 +88,6 @@ def get_job(job_id: str, db: Session = Depends(get_db)):
 
 @router.get("/{job_id}/snapshots")
 def list_snapshots(job_id: str, db: Session = Depends(get_db)):
-    """
-    List snapshots for a job. Returns URLs under /storage/... for <img src>.
-    """
     job = db.query(VideoJob).filter_by(job_id=job_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -115,10 +101,8 @@ def list_snapshots(job_id: str, db: Session = Depends(get_db)):
 
     out = []
     for s in snaps:
-        # Snapshot.uri is typically an absolute path to a file under STORAGE_ROOT.
         p = Path(s.uri)
 
-        # Convert absolute file path -> relative -> URL under /storage
         rel = p.relative_to(STORAGE_ROOT)
         url = f"/storage/{rel.as_posix()}"
 
@@ -137,10 +121,6 @@ def list_snapshots(job_id: str, db: Session = Depends(get_db)):
 
 @router.post("/{job_id}/extract")
 def run_extract(job_id: str, background: BackgroundTasks, db: Session = Depends(get_db)):
-    """
-    Trigger extraction in the background.
-    (Optional) checks job exists first.
-    """
     job = db.query(VideoJob).filter_by(job_id=job_id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Job not found")
@@ -163,10 +143,9 @@ def create_job(
     background: BackgroundTasks,
     db: Session = Depends(get_db),
 
-    # uploaded video
     video: UploadFile = File(...),
 
-    # config fields from UI
+    #ui config fields
     sampling_fps: float = Form(1.0),
     chunk_length_sec: int = Form(10),
     resize_width: int = Form(512),
@@ -174,16 +153,15 @@ def create_job(
     black_white: bool = Form(False),
     image_format: str = Form("jpg"),
 
-    # workflow toggle
     run_extract: bool = Form(True),
 ):
     job_id = str(uuid.uuid4())
 
-    # 1) create job
+    #create job
     job = VideoJob(job_id=job_id, status="uploaded")
     db.add(job)
 
-    # 2) save video file into storage/jobs/<job_id>/video/original.<ext>
+    #save video file into storage
     ext = "mp4"
     if video.filename and "." in video.filename:
         ext = video.filename.rsplit(".", 1)[-1].lower()
@@ -195,7 +173,7 @@ def create_job(
         db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to save upload: {e}")
 
-    # 3) persist video asset row
+    #persist video asset row
     db.add(
         VideoAsset(
             video_id=str(uuid.uuid4()),
@@ -204,7 +182,7 @@ def create_job(
         )
     )
 
-    # 4) persist snapshot config row
+    #persist snapshot config row
     db.add(
         SnapshotConfig(
             config_id=str(uuid.uuid4()),
@@ -220,7 +198,7 @@ def create_job(
 
     db.commit()
 
-    # 5) optionally run extraction in background
+    #run extraction in background 
     if run_extract:
         background.add_task(_run_extract_job, job_id)
 

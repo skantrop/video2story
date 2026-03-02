@@ -1,10 +1,9 @@
-import { useEffect, useMemo, useState } from "react";
-
+import { useEffect, useState } from "react";
 import JobsSidebar from "../components/JobsSidebar";
 import SnapshotsGrid from "../components/SnapshotsGrid";
 import ScenesPage from "./ScenesPage";
-
 import { listJobs, getJob, listSnapshots, deleteJob } from "../api/jobs";
+import { getNarrative, generateNarrative } from "../api/narrative";
 
 export default function JobsPage() {
   const [jobs, setJobs] = useState([]);
@@ -18,11 +17,8 @@ export default function JobsPage() {
 
   const [tab, setTab] = useState("snapshots");
 
-  // ---------- helpers ----------
-  const isRunning = useMemo(() => {
-    const st = detail?.status;
-    return st && ["created", "uploaded", "extracting"].includes(st);
-  }, [detail?.status]);
+  const [narr, setNarr] = useState(null);
+  const [narrLoading, setNarrLoading] = useState(false);
 
   async function refreshJobs() {
     setLoadingJobs(true);
@@ -31,12 +27,11 @@ export default function JobsPage() {
       const list = data.jobs ?? [];
       setJobs(list);
 
-      // auto-select first if none selected
       if (!selectedJobId && list.length) {
         setSelectedJobId(list[0].job_id);
       }
     } catch (e) {
-      setError(String(e.message || e));
+      setError(String(e?.message || e));
     } finally {
       setLoadingJobs(false);
     }
@@ -49,17 +44,40 @@ export default function JobsPage() {
       setDetail(d);
       setSnapshots(s.snapshots ?? []);
     } catch (e) {
-      setError(String(e.message || e));
+      setError(String(e?.message || e));
     }
   }
 
-  // ---------- delete ----------
+  async function loadNarrative(jobId) {
+    if (!jobId) return;
+    try {
+      const res = await getNarrative(jobId);
+      setNarr(res.narrative || null);
+    } catch (e) {
+      setError(String(e?.message || e));
+    }
+  }
+
+  async function onGenerateNarrative() {
+    if (!selectedJobId) return;
+    setNarrLoading(true);
+    setError("");
+    try {
+      const res = await generateNarrative(selectedJobId);
+      setNarr(res.narrative || null);
+      setTab("narrative");
+    } catch (e) {
+      setError(String(e?.message || e));
+    } finally {
+      setNarrLoading(false);
+    }
+  }
+
   async function onDelete(jobId) {
     if (!jobId) return;
     if (!confirm("Delete this job? This removes DB rows and files.")) return;
 
     setError("");
-
     try {
       await deleteJob(jobId);
 
@@ -69,37 +87,36 @@ export default function JobsPage() {
 
       const nextId = list.length ? list[0].job_id : "";
       setSelectedJobId(nextId);
+
       setDetail(null);
       setSnapshots([]);
+      setNarr(null);
       setTab("snapshots");
 
       if (nextId) {
         await loadDetailAndSnapshots(nextId);
       }
     } catch (e) {
-      setError(String(e.message || e));
+      setError(String(e?.message || e));
     }
   }
 
-  // ---------- initial load ----------
   useEffect(() => {
     refreshJobs();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ---------- when selection changes: load once + reset tab ----------
   useEffect(() => {
     if (!selectedJobId) return;
     setError("");
     setTab("snapshots");
     setDetail(null);
     setSnapshots([]);
+    setNarr(null);
     loadDetailAndSnapshots(selectedJobId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedJobId]);
 
-
-  // ---------- UI ----------
   return (
     <div style={{ display: "grid", gridTemplateColumns: "320px 1fr", height: "100vh" }}>
       <JobsSidebar
@@ -118,7 +135,6 @@ export default function JobsPage() {
 
         {selectedJobId && (
           <>
-            {/* DETAIL */}
             {detail && (
               <div style={{ marginBottom: 12 }}>
                 <h2 style={{ marginBottom: 6 }}>Job detail</h2>
@@ -136,7 +152,6 @@ export default function JobsPage() {
               </div>
             )}
 
-            {/* TABS */}
             <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
               <button
                 onClick={() => setTab("snapshots")}
@@ -144,9 +159,9 @@ export default function JobsPage() {
                   padding: "6px 10px",
                   borderRadius: 10,
                   border: "1px solid #ddd",
-                  background: tab === "snapshots" ? "#f3f3f3" : "#908f8f",
-                  color: "#666",
+                  background: tab === "snapshots" ? "#f3f3f3" : "white",
                   cursor: "pointer",
+                  color: "#666",
                 }}
               >
                 Snapshots
@@ -158,19 +173,74 @@ export default function JobsPage() {
                   padding: "6px 10px",
                   borderRadius: 10,
                   border: "1px solid #ddd",
-                  background: tab === "scenes" ? "#f3f3f3" : "#908f8f",
-                  color: "#666",
+                  background: tab === "scenes" ? "#f3f3f3" : "white",
                   cursor: "pointer",
+                  color: "#666",
+
                 }}
               >
                 Scenes
               </button>
+
+              <button
+                onClick={() => {
+                  setTab("narrative");
+                  loadNarrative(selectedJobId);
+                }}
+                style={{
+                  padding: "6px 10px",
+                  borderRadius: 10,
+                  border: "1px solid #ddd",
+                  background: tab === "narrative" ? "#f3f3f3" : "white",
+                  cursor: "pointer",
+                  color: "#666",
+                }}
+              >
+                Narrative
+              </button>
+
+              <div style={{ flex: 1 }} />
+
+              <button
+                onClick={onGenerateNarrative}
+                disabled={narrLoading}
+                style={{
+                  padding: "6px 10px",
+                  borderRadius: 10,
+                  border: "1px solid #ddd",
+                  background: narrLoading ? "#f3f3f3" : "white",
+                  cursor: narrLoading ? "not-allowed" : "pointer",
+                  color: "#666",
+                }}
+              >
+                {narrLoading ? "Generating..." : "Generate narrative"}
+              </button>
             </div>
 
-            {/* CONTENT */}
             {tab === "snapshots" && <SnapshotsGrid snapshots={snapshots} />}
 
             {tab === "scenes" && <ScenesPage jobId={selectedJobId} />}
+
+            {tab === "narrative" && (
+            <div>
+                {!narr && <div style={{ marginTop: 12, color: "#666" }}>No narrative yet.</div>}
+
+                {narr && (
+                <div style={{ marginTop: 12 }}>
+                    <h3>Full story</h3>
+                    <p style={{ whiteSpace: "pre-wrap" }}>{narr.full_story}</p>
+
+                    <h3>Summary</h3>
+                    <pre style={{ whiteSpace: "pre-wrap" }}>{narr.short_summary}</pre>
+
+                    <h3>Structured</h3>
+                    <pre style={{ whiteSpace: "pre-wrap" }}>
+                    {JSON.stringify(narr.structured_data, null, 2)}
+                    </pre>
+                </div>
+                )}
+            </div>
+            )}
           </>
         )}
       </main>
