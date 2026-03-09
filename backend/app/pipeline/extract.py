@@ -6,6 +6,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import cv2
+import numpy as np
 from sqlalchemy.orm import Session
 
 from app.persistence.tables import Snapshot, SnapshotConfig, VideoAsset
@@ -45,9 +46,14 @@ def _process_frame(path: Path, cfg: SnapshotConfig):
     if cfg.black_white:
         if len(img.shape) == 3:
             img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        _, img = cv2.threshold(img, 127, 255, cv2.THRESH_BINARY)
-    elif cfg.grayscale:
-        img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
+        noise_strength = 32
+        noise = np.random.randint(-noise_strength, noise_strength, img.shape, dtype=np.int16)
+
+        noisy = img.astype(np.int16) + noise
+        noisy = np.clip(noisy, 0, 255).astype(np.uint8)
+
+        _, img = cv2.threshold(noisy, 127, 255, cv2.THRESH_BINARY)
 
     target_w = cfg.resize_width or DEFAULT_RESIZE_WIDTH
     h, w = img.shape[:2]

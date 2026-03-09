@@ -12,3 +12,4 @@ opencv-python
 httpx
 Pillow
 openai
+numpy
