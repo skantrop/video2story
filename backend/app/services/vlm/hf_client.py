@@ -9,7 +9,10 @@ from typing import List
 
 from openai import OpenAI
 from PIL import Image
+from dotenv import load_dotenv
 
+
+load_dotenv()
 
 @dataclass(frozen=True)
 class VLMResult:

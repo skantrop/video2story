@@ -32,16 +32,21 @@ export default function ScenesPage({ jobId }) {
     }
   }
 
-  async function loadScene(sceneId) {
-    if (!jobId || !sceneId) return;
-    setError("");
-    try {
-      const data = await getScene(jobId, sceneId, 8);
-      setSceneDetail(data);
-    } catch (e) {
-      setError(String(e.message || e));
-    }
+async function loadScene(sceneId) {
+  if (!jobId || !sceneId) return;
+  setError("");
+  try {
+    const data = await getScene(jobId, sceneId, 8);
+    const fromList = scenes.find((s) => s.scene_id === sceneId);
+
+    setSceneDetail({
+      ...data,
+      short_description: data.short_description ?? fromList?.short_description ?? null,
+    });
+  } catch (e) {
+    setError(String(e.message || e));
   }
+}
 
   async function onBuildScenes() {
     if (!jobId) return;
@@ -66,12 +71,12 @@ async function onDescribe() {
   try {
     const updated = await describeScene(jobId, selectedSceneId, 8);
 
-    // ✅ update right panel immediately
+    //update right panel immediately
     setSceneDetail((prev) =>
       prev ? { ...prev, short_description: updated.short_description } : prev
     );
 
-    // ✅ update left list immediately (main page list)
+    //update left list immediately (main page list)
     setScenes((prev) =>
       prev.map((s) =>
         s.scene_id === selectedSceneId
