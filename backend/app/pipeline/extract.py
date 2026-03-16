@@ -46,14 +46,8 @@ def _process_frame(path: Path, cfg: SnapshotConfig):
     if cfg.black_white:
         if len(img.shape) == 3:
             img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
-        noise_strength = 32
-        noise = np.random.randint(-noise_strength, noise_strength, img.shape, dtype=np.int16)
-
-        noisy = img.astype(np.int16) + noise
-        noisy = np.clip(noisy, 0, 255).astype(np.uint8)
-
-        _, img = cv2.threshold(noisy, 127, 255, cv2.THRESH_BINARY)
+        
+        img = bayer_dither_4x4(img)
 
     target_w = cfg.resize_width or DEFAULT_RESIZE_WIDTH
     h, w = img.shape[:2]
@@ -63,7 +57,29 @@ def _process_frame(path: Path, cfg: SnapshotConfig):
         img = cv2.resize(img, (target_w, new_h))
 
     cv2.imwrite(str(path), img)
-    return img.shape[1], img.shape[0]  # width x height
+    return img.shape[1], img.shape[0]
+
+def bayer_dither_4x4(img: np.ndarray) -> np.ndarray:
+    bayer_4x4 = np.array([
+        [ 0,  8,  2, 10],
+        [12,  4, 14,  6],
+        [ 3, 11,  1,  9],
+        [15,  7, 13,  5]
+    ])
+    
+    threshold_map = (bayer_4x4 * 16) + 8
+    
+    h, w = img.shape
+    
+    tiles_y = (h + 3) // 4
+    tiles_x = (w + 3) // 4
+    tiled = np.tile(threshold_map, (tiles_y, tiles_x))
+    
+    tiled = tiled[:h, :w]
+    
+    binary = (img > tiled).astype(np.uint8) * 255
+    
+    return binary
 
 
 def extract_preprocess_persist_snapshots(
