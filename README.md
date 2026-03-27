@@ -150,3 +150,8 @@ make backend
 ```bash
 make frontend
 ```
+
+## Run tests:
+```bash
+make test
+```
