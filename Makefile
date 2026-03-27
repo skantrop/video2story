@@ -18,3 +18,6 @@ install-backend:
 
 install-frontend:
 	cd frontend && npm install
+
+test:
+	cd backend && PYTHONPATH=. pytest tests -v

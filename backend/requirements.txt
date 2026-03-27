@@ -13,3 +13,8 @@ httpx
 Pillow
 openai
 numpy
+pytest
+pytest-mock
+pytest-cov
+testcontainers[postgres]
+psycopg2-binary
