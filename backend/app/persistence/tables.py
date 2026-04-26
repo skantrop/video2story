@@ -26,6 +26,7 @@ class VideoJob(Base):
 
     job_id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()), index=True)
     status = Column(String, nullable=False, default="created")
+    error = Column(Text, nullable=True)
     created_at = Column(DateTime(timezone=True), nullable=False, server_default=func.now())
 
     # 1:1

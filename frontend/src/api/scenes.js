@@ -1,24 +1,22 @@
 import { apiFetch } from "./client";
 
 export async function buildScenes(jobId) {
-  const res = await apiFetch(`/jobs/${jobId}/scenes/build`, { method: "POST" });
-  return res.json();
+  return await apiFetch(`/jobs/${jobId}/scenes/build`, { method: "POST" });
 }
 
 export async function listScenes(jobId) {
-  const res = await apiFetch(`/jobs/${jobId}/scenes`);
-  return res.json();
+  return await apiFetch(`/jobs/${jobId}/scenes`);
 }
 
 export async function getScene(jobId, sceneId, keyframes = 8) {
-  const res = await apiFetch(`/jobs/${jobId}/scenes/${sceneId}?keyframes=${keyframes}`);
-  return res.json();
+  return await apiFetch(
+    `/jobs/${jobId}/scenes/${sceneId}?keyframes=${keyframes}`
+  );
 }
 
 export async function describeScene(jobId, sceneId, keyframes = 8) {
-  const res = await apiFetch(
+  return await apiFetch(
     `/jobs/${jobId}/scenes/${sceneId}/describe?keyframes=${keyframes}`,
     { method: "POST" }
   );
-  return res.json();
 }

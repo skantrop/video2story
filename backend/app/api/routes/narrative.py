@@ -62,7 +62,7 @@ def generate_narrative(job_id: str, db: Session = Depends(get_db)):
     if not usable:
         raise HTTPException(
             status_code=400,
-            detail="No described scenes found. Describe scenes first (short_description != '(pending)').",
+            detail="No scenes are ready yet. Go to the Scenes tab and add descriptions first.",
         )
 
     lines = [_scene_line(s) for s in usable]

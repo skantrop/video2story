@@ -19,10 +19,30 @@ STORAGE_ROOT = Path(__file__).resolve().parents[3] / "storage"
 def _run_extract_job(job_id: str) -> None:
     db = SessionLocal()
     try:
+        job = db.query(VideoJob).filter_by(job_id=job_id).first()
+        if not job:
+            return
+
+        job.status = "processing"
+        db.commit()
+
         extract_preprocess_persist_snapshots(job_id, db, STORAGE_ROOT)
+
+        job.status = "completed"
+        db.commit()
+
+    except Exception as e:
+        job = db.query(VideoJob).filter_by(job_id=job_id).first()
+        if job:
+            job.status = "failed"
+
+            if hasattr(job, "error"):
+                job.error = str(e)
+
+            db.commit()
+
     finally:
         db.close()
-
 
 @router.get("")
 def list_jobs(db: Session = Depends(get_db)):
@@ -70,6 +90,7 @@ def get_job(job_id: str, db: Session = Depends(get_db)):
     return {
         "job_id": job.job_id,
         "status": job.status,
+        "error": getattr(job, "error", None),
         "created_at": job.created_at.isoformat() if job.created_at else None,
         "video_uri": asset.uri if asset else None,
         "snapshot_count": int(snapshot_count or 0),
@@ -204,7 +225,7 @@ def create_job(
 
     return {
         "job_id": job_id,
-        "status": "extracting" if run_extract else "uploaded",
+        "status": "processing" if run_extract else "uploaded",
         "video_url": f"/storage/jobs/{job_id}/video/{video_path.name}",
     }
 

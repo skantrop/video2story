@@ -124,19 +124,29 @@ def test_extract_handles_no_frames(
     tmp_path,
     mocker,
 ):
+    """
+    If ffmpeg runs but no frames are produced,
+    the pipeline should raise a RuntimeError
+    (treated as corrupted/invalid video).
+    """
+
+    # Mock ffmpeg run (does nothing)
     mocker.patch("app.pipeline.extract._run_ffmpeg_extract")
+
+    # Mock no frames returned
     mocker.patch(
         "app.pipeline.extract._sorted_frame_files",
         return_value=[],
     )
 
-    result = extract_preprocess_persist_snapshots(
-        job_id=job.job_id,
-        db=db_session,
-        storage_root=tmp_path,
-    )
+    # Expect failure
+    with pytest.raises(RuntimeError, match="Frame extraction failed"):
+        extract_preprocess_persist_snapshots(
+            job_id=job.job_id,
+            db=db_session,
+            storage_root=tmp_path,
+        )
 
+    # Ensure nothing was written to DB
     saved = db_session.query(Snapshot).filter_by(job_id=job.job_id).all()
-
-    assert len(result.files) == 0
     assert saved == []

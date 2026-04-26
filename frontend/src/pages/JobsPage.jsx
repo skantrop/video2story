@@ -19,6 +19,7 @@ export default function JobsPage() {
 
   const [narr, setNarr] = useState(null);
   const [narrLoading, setNarrLoading] = useState(false);
+  const isFailed = detail?.status === "failed";
 
   async function refreshJobs() {
     setLoadingJobs(true);
@@ -31,7 +32,12 @@ export default function JobsPage() {
         setSelectedJobId(list[0].job_id);
       }
     } catch (e) {
-      setError(String(e?.message || e));
+      const msg =
+        e?.response?.data?.detail ||
+        e?.message ||
+        "Something went wrong";
+
+      setError(msg);
     } finally {
       setLoadingJobs(false);
     }
@@ -44,7 +50,12 @@ export default function JobsPage() {
       setDetail(d);
       setSnapshots(s.snapshots ?? []);
     } catch (e) {
-      setError(String(e?.message || e));
+      const msg =
+        e?.response?.data?.detail ||
+        e?.message ||
+        "Something went wrong";
+
+      setError(msg);
     }
   }
 
@@ -54,7 +65,12 @@ export default function JobsPage() {
       const res = await getNarrative(jobId);
       setNarr(res.narrative || null);
     } catch (e) {
-      setError(String(e?.message || e));
+      const msg =
+        e?.response?.data?.detail ||
+        e?.message ||
+        "Something went wrong";
+
+      setError(msg);
     }
   }
 
@@ -67,7 +83,14 @@ export default function JobsPage() {
       setNarr(res.narrative || null);
       setTab("narrative");
     } catch (e) {
-      setError(String(e?.message || e));
+      const msg =
+        e?.response?.data?.detail ||
+        e?.message ||
+        "Something went wrong";
+
+      setError(msg);
+        setTab("narrative");
+
     } finally {
       setNarrLoading(false);
     }
@@ -97,7 +120,12 @@ export default function JobsPage() {
         await loadDetailAndSnapshots(nextId);
       }
     } catch (e) {
-      setError(String(e?.message || e));
+      const msg =
+        e?.response?.data?.detail ||
+        e?.message ||
+        "Something went wrong";
+
+      setError(msg);
     }
   }
 
@@ -129,7 +157,6 @@ export default function JobsPage() {
       />
 
       <main style={{ padding: 16, overflow: "auto" }}>
-        {error && <div style={{ color: "red", marginBottom: 12 }}>{error}</div>}
 
         {!selectedJobId && <div>Select a job</div>}
 
@@ -143,7 +170,29 @@ export default function JobsPage() {
                     <b>ID:</b> {detail.job_id}
                   </div>
                   <div>
-                    <b>Status:</b> {detail.status}
+                      <div>
+                        <b>Status:</b>{" "}
+                        <span
+                          style={{
+                            color:
+                              detail.status === "completed"
+                                ? "green"
+                                : detail.status === "failed"
+                                ? "red"
+                                : detail.status === "processing"
+                                ? "orange"
+                                : "#555",
+                            fontWeight: "bold",
+                          }}
+                        >
+                          {detail.status}
+                        </span>
+                      </div>
+                      {detail.error && (
+                        <div style={{ color: "red", marginTop: 6 }}>
+                          <b>Error:</b> {detail.error}
+                        </div>
+                      )}
                   </div>
                   <div>
                     <b>Snapshots:</b> {detail.snapshot_count}
@@ -221,8 +270,23 @@ export default function JobsPage() {
 
             {tab === "scenes" && <ScenesPage jobId={selectedJobId} />}
 
-            {tab === "narrative" && (
-            <div>
+{tab === "narrative" && (
+  <div>
+    {error && (
+      <div
+        style={{
+          background: "#fff4e5",
+          border: "1px solid #ffcc80",
+          padding: 10,
+          borderRadius: 8,
+          color: "#b26a00",
+          marginBottom: 12,
+        }}
+      >
+        <b>⚠️ Cannot generate narrative</b>
+        <div style={{ marginTop: 4 }}>{error}</div>
+      </div>
+    )}
                 {!narr && <div style={{ marginTop: 12, color: "#666" }}>No narrative yet.</div>}
 
                 {narr && (

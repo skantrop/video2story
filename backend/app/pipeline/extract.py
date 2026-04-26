@@ -25,7 +25,10 @@ def _run_ffmpeg_extract(video_path: Path, out_pattern: Path, sampling_fps: float
         "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
         "-i", str(video_path), "-vf", f"fps={sampling_fps}", str(out_pattern),
     ]
-    subprocess.run(cmd, check=True)
+    try:
+        subprocess.run(cmd, check=True, capture_output=True, text=True)
+    except subprocess.CalledProcessError as e:
+        raise RuntimeError("Invalid or corrupted video file")
 
 
 def _sorted_frame_files(snapshots_dir: Path, image_format: str) -> list[Path]:
@@ -43,10 +46,13 @@ def _process_frame(path: Path, cfg: SnapshotConfig):
     if img is None:
         return None, None
 
+    if cfg.grayscale:
+        if len(img.shape) == 3:
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+
     if cfg.black_white:
         if len(img.shape) == 3:
             img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-        
         img = bayer_dither_4x4(img)
 
     target_w = cfg.resize_width or DEFAULT_RESIZE_WIDTH
@@ -102,6 +108,9 @@ def extract_preprocess_persist_snapshots(
 
     files = _sorted_frame_files(snapshots_dir, cfg.image_format)
 
+    if not files:
+        raise RuntimeError("Frame extraction failed: invalid or corrupted video")
+    
     for i, f in enumerate(files):
         width, height = _process_frame(f, cfg)
         timestamp_sec = i / float(cfg.sampling_fps)

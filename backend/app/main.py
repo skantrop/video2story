@@ -5,8 +5,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes.jobs import router as jobs_router
 from app.api.routes.scenes import router as scenes_router
 from app.api.routes.narrative import router as narrative_router
+from app.persistence.db import init_db
+from contextlib import asynccontextmanager
 
-app = FastAPI()
+@asynccontextmanager
+async def lifespan(app):
+    init_db()
+    yield
+
+app = FastAPI(lifespan=lifespan)
 
 app.add_middleware(
     CORSMiddleware,
